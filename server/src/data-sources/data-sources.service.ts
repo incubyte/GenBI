@@ -35,25 +35,25 @@ export class DataSourcesService {
     queryDto: QueryDataSourceDto,
   ): Promise<PaginatedResult<DataSource>> {
     const { page = 1, pageSize = 20, sortBy = 'name', sortOrder = 'asc', search, status, type } = queryDto;
-    
+
     // Build where conditions
     const where: FindOptionsWhere<DataSource> = {};
-    
+
     if (search) {
       where.name = Like(`%${search}%`);
     }
-    
+
     if (status) {
       where.status = status;
     }
-    
+
     if (type) {
       where.type = type;
     }
-    
+
     // Calculate pagination
     const skip = (page - 1) * pageSize;
-    
+
     // Execute query with pagination
     const [items, totalItems] = await this.dataSourceRepository.findAndCount({
       where,
@@ -61,9 +61,9 @@ export class DataSourcesService {
       skip,
       take: pageSize,
     });
-    
+
     const totalPages = Math.ceil(totalItems / pageSize);
-    
+
     return {
       items,
       pagination: {
@@ -80,11 +80,11 @@ export class DataSourcesService {
       where: { id },
       relations: ['tables', 'tables.columns', 'syncHistory'],
     });
-    
+
     if (!dataSource) {
       throw new NotFoundException(`Data source with ID ${id} not found`);
     }
-    
+
     return dataSource;
   }
 
@@ -95,10 +95,10 @@ export class DataSourcesService {
       createdBy: userId,
       status: DataSourceStatus.CONNECTING,
     });
-    
+
     // Save the data source
     const savedDataSource = await this.dataSourceRepository.save(dataSource);
-    
+
     // For file-based data sources, we would process the file here
     if (
       [DataSourceType.CSV, DataSourceType.EXCEL, DataSourceType.JSON].includes(
@@ -112,24 +112,24 @@ export class DataSourcesService {
       // For database and API data sources, we would connect and extract schema
       await this.simulateDatabaseConnection(savedDataSource);
     }
-    
+
     return this.findOne(savedDataSource.id);
   }
 
   async update(id: string, updateDto: UpdateDataSourceDto): Promise<DataSource> {
     const dataSource = await this.findOne(id);
-    
+
     // Update the data source
     Object.assign(dataSource, updateDto);
-    
+
     // If connection details were updated, we need to reconnect
     if (updateDto.connectionDetails) {
       dataSource.status = DataSourceStatus.CONNECTING;
     }
-    
+
     // Save the updated data source
     await this.dataSourceRepository.save(dataSource);
-    
+
     // If connection details were updated, reconnect and update schema
     if (updateDto.connectionDetails) {
       if (
@@ -142,15 +142,15 @@ export class DataSourcesService {
         await this.simulateDatabaseConnection(dataSource);
       }
     }
-    
+
     return this.findOne(id);
   }
 
   async remove(id: string): Promise<{ message: string; id: string }> {
     const dataSource = await this.findOne(id);
-    
+
     await this.dataSourceRepository.remove(dataSource);
-    
+
     return {
       message: 'Data source deleted successfully',
       id,
@@ -162,7 +162,7 @@ export class DataSourcesService {
     syncDto: SyncDataSourceDto,
   ): Promise<DataSourceSync> {
     const dataSource = await this.findOne(id);
-    
+
     // Create a new sync job
     const sync = this.syncRepository.create({
       dataSource,
@@ -171,14 +171,14 @@ export class DataSourcesService {
       tables: syncDto.tables,
       estimatedCompletionTime: new Date(Date.now() + 30 * 60 * 1000), // 30 minutes from now
     });
-    
+
     // Save the sync job
     const savedSync = await this.syncRepository.save(sync);
-    
+
     // In a real implementation, this would trigger an async job to sync the data source
     // For this example, we'll simulate the sync process
     setTimeout(() => this.simulateSyncProcess(savedSync), 1000);
-    
+
     return savedSync;
   }
 
@@ -189,13 +189,13 @@ export class DataSourcesService {
     const sync = await this.syncRepository.findOne({
       where: { id: syncId, dataSourceId },
     });
-    
+
     if (!sync) {
       throw new NotFoundException(
         `Sync job with ID ${syncId} not found for data source ${dataSourceId}`,
       );
     }
-    
+
     return sync;
   }
 
@@ -204,17 +204,17 @@ export class DataSourcesService {
   private async simulateFileProcessing(dataSource: DataSource) {
     // In a real implementation, this would process the file and extract schema
     // For this example, we'll simulate the process
-    
+
     // Simulate processing delay
     await new Promise((resolve) => setTimeout(resolve, 1000));
-    
+
     // Update data source status
     dataSource.status = DataSourceStatus.CONNECTED;
     dataSource.lastSync = new Date();
     dataSource.recordCount = 5000;
-    
+
     await this.dataSourceRepository.save(dataSource);
-    
+
     // Create sample tables and columns
     await this.createSampleSchema(dataSource);
   }
@@ -222,14 +222,14 @@ export class DataSourcesService {
   private async simulateDatabaseConnection(dataSource: DataSource) {
     // In a real implementation, this would connect to the database and extract schema
     // For this example, we'll simulate the process
-    
+
     // Simulate connection delay
     await new Promise((resolve) => setTimeout(resolve, 2000));
-    
+
     // Update data source status
     dataSource.status = DataSourceStatus.CONNECTED;
     dataSource.lastSync = new Date();
-    
+
     // Set record count based on data source type
     switch (dataSource.type) {
       case DataSourceType.POSTGRESQL:
@@ -248,9 +248,9 @@ export class DataSourcesService {
       default:
         dataSource.recordCount = 10000;
     }
-    
+
     await this.dataSourceRepository.save(dataSource);
-    
+
     // Create sample tables and columns
     await this.createSampleSchema(dataSource);
   }
@@ -260,11 +260,11 @@ export class DataSourcesService {
     const existingTables = await this.tableRepository.find({
       where: { dataSourceId: dataSource.id },
     });
-    
+
     if (existingTables.length > 0) {
       await this.tableRepository.remove(existingTables);
     }
-    
+
     // Create sample tables based on data source type
     switch (dataSource.type) {
       case DataSourceType.POSTGRESQL:
@@ -288,16 +288,17 @@ export class DataSourcesService {
 
   private async createSampleDatabaseSchema(dataSource: DataSource) {
     // Create sample tables for a relational database
-    
+
     // Campaigns table
     const campaignsTable = await this.tableRepository.save(
       this.tableRepository.create({
         dataSource,
+        dataSourceId: dataSource.id, // Explicitly set the dataSourceId
         name: 'campaigns',
         rowCount: 250,
       }),
     );
-    
+
     // Campaign columns
     await this.columnRepository.save([
       this.columnRepository.create({
@@ -332,16 +333,17 @@ export class DataSourcesService {
         type: 'varchar',
       }),
     ]);
-    
+
     // Campaign metrics table
     const metricsTable = await this.tableRepository.save(
       this.tableRepository.create({
         dataSource,
+        dataSourceId: dataSource.id, // Explicitly set the dataSourceId
         name: 'campaign_metrics',
         rowCount: 12500,
       }),
     );
-    
+
     // Metrics columns
     await this.columnRepository.save([
       this.columnRepository.create({
@@ -381,7 +383,7 @@ export class DataSourcesService {
         type: 'decimal',
       }),
     ]);
-    
+
     // Create relationship
     await this.relationshipRepository.save(
       this.relationshipRepository.create({
@@ -396,16 +398,17 @@ export class DataSourcesService {
 
   private async createSampleMongoSchema(dataSource: DataSource) {
     // Create sample collections for MongoDB
-    
+
     // Campaigns collection
     const campaignsCollection = await this.tableRepository.save(
       this.tableRepository.create({
         dataSource,
+        dataSourceId: dataSource.id, // Explicitly set the dataSourceId
         name: 'campaigns',
         rowCount: 250,
       }),
     );
-    
+
     // Campaign fields
     await this.columnRepository.save([
       this.columnRepository.create({
@@ -454,16 +457,17 @@ export class DataSourcesService {
 
   private async createSampleFileSchema(dataSource: DataSource) {
     // Create sample schema for file-based data sources
-    
+
     // For CSV/Excel, create a single table
     const dataTable = await this.tableRepository.save(
       this.tableRepository.create({
         dataSource,
+        dataSourceId: dataSource.id, // Explicitly set the dataSourceId
         name: dataSource.name,
         rowCount: dataSource.recordCount,
       }),
     );
-    
+
     // Add columns based on file type
     if (dataSource.type === DataSourceType.CSV || dataSource.type === DataSourceType.EXCEL) {
       await this.columnRepository.save([
@@ -523,16 +527,17 @@ export class DataSourcesService {
 
   private async createSampleApiSchema(dataSource: DataSource) {
     // Create sample schema for API data sources
-    
+
     // Users endpoint
     const usersTable = await this.tableRepository.save(
       this.tableRepository.create({
         dataSource,
+        dataSourceId: dataSource.id, // Explicitly set the dataSourceId
         name: 'users',
         rowCount: 10000,
       }),
     );
-    
+
     await this.columnRepository.save([
       this.columnRepository.create({
         table: usersTable,
@@ -556,16 +561,17 @@ export class DataSourcesService {
         type: 'date',
       }),
     ]);
-    
+
     // Posts endpoint
     const postsTable = await this.tableRepository.save(
       this.tableRepository.create({
         dataSource,
+        dataSourceId: dataSource.id, // Explicitly set the dataSourceId
         name: 'posts',
         rowCount: 50000,
       }),
     );
-    
+
     await this.columnRepository.save([
       this.columnRepository.create({
         table: postsTable,
@@ -594,7 +600,7 @@ export class DataSourcesService {
         type: 'date',
       }),
     ]);
-    
+
     // Create relationship
     await this.relationshipRepository.save(
       this.relationshipRepository.create({
@@ -613,27 +619,27 @@ export class DataSourcesService {
       sync.status = SyncStatus.IN_PROGRESS;
       sync.progress = 0;
       await this.syncRepository.save(sync);
-      
+
       // Get the data source
       const dataSource = await this.dataSourceRepository.findOne({
         where: { id: sync.dataSourceId },
         relations: ['tables'],
       });
-      
+
       if (!dataSource) {
         throw new Error(`Data source with ID ${sync.dataSourceId} not found`);
       }
-      
+
       // Set total tables
       const tables = sync.tables
         ? dataSource.tables.filter((table) => sync.tables.includes(table.name))
         : dataSource.tables;
-      
+
       sync.totalTables = tables.length;
       sync.tablesProcessed = 0;
       sync.recordsProcessed = 0;
       await this.syncRepository.save(sync);
-      
+
       // Simulate processing each table
       for (let i = 0; i < tables.length; i++) {
         // Update progress
@@ -641,16 +647,16 @@ export class DataSourcesService {
         sync.progress = Math.floor((i / tables.length) * 100);
         sync.recordsProcessed += Math.floor(Math.random() * 10000) + 1000;
         await this.syncRepository.save(sync);
-        
+
         // Simulate processing delay
         await new Promise((resolve) => setTimeout(resolve, 1000));
       }
-      
+
       // Update data source
       dataSource.lastSync = new Date();
       dataSource.recordCount = sync.recordsProcessed;
       await this.dataSourceRepository.save(dataSource);
-      
+
       // Complete the sync
       sync.status = SyncStatus.COMPLETED;
       sync.progress = 100;
