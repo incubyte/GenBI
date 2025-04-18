@@ -25,7 +25,6 @@ import {
 } from '@nestjs/swagger';
 import { DataSourcesService } from './data-sources.service';
 import { ConnectionTestService } from './connection-test.service';
-import { FileUploadService } from './file-upload.service';
 import { CreateDataSourceDto } from './dto/create-data-source.dto';
 import { UpdateDataSourceDto } from './dto/update-data-source.dto';
 import { QueryDataSourceDto } from './dto/query-data-source.dto';
@@ -43,7 +42,6 @@ export class DataSourcesController {
   constructor(
     private readonly dataSourcesService: DataSourcesService,
     private readonly connectionTestService: ConnectionTestService,
-    private readonly fileUploadService: FileUploadService,
   ) {}
 
   @Get()
@@ -171,56 +169,4 @@ export class DataSourcesController {
     return this.dataSourcesService.getSyncStatus(id, syncId);
   }
 
-  @Post('files/upload')
-  @ApiOperation({ summary: 'Upload a file for data source' })
-  @ApiConsumes('multipart/form-data')
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        file: {
-          type: 'string',
-          format: 'binary',
-        },
-        type: {
-          type: 'string',
-          enum: ['csv', 'excel', 'json'],
-        },
-        name: {
-          type: 'string',
-        },
-      },
-      required: ['file', 'type'],
-    },
-  })
-  @ApiResponse({
-    status: 201,
-    description: 'File uploaded successfully',
-  })
-  @UseInterceptors(FileInterceptor('file'))
-  async uploadFile(
-    @UploadedFile() file: Express.Multer.File,
-    @Body('type') type: string,
-    @Body('name') name?: string,
-  ) {
-    return this.fileUploadService.uploadFile(file, type, name);
-  }
-
-  @Get('files/:fileId/preview')
-  @ApiOperation({ summary: 'Get file preview' })
-  @ApiParam({ name: 'fileId', description: 'File ID' })
-  @ApiResponse({
-    status: 200,
-    description: 'Returns the file preview',
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'File not found',
-  })
-  async getFilePreview(
-    @Param('fileId') fileId: string,
-    @Query() options: FilePreviewDto,
-  ) {
-    return this.fileUploadService.getFilePreview(fileId, options);
-  }
 }

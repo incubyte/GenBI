@@ -7,7 +7,6 @@ import { DataSourceSync } from './entities/data-source-sync.entity';
 import { DataSourceTable } from './entities/data-source-table.entity';
 import { DataSourceColumn } from './entities/data-source-column.entity';
 import { DataSourceRelationship } from './entities/data-source-relationship.entity';
-import { FileUploadService } from './file-upload.service';
 import { ConnectionTestService } from './connection-test.service';
 
 @Module({
@@ -21,7 +20,7 @@ import { ConnectionTestService } from './connection-test.service';
     ]),
   ],
   controllers: [DataSourcesController],
-  providers: [DataSourcesService, FileUploadService, ConnectionTestService],
+  providers: [DataSourcesService, ConnectionTestService],
   exports: [DataSourcesService],
 })
 export class DataSourcesModule {}
