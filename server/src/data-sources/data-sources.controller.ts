@@ -7,41 +7,41 @@ import {
   Body,
   Param,
   Query,
-  UseInterceptors,
-  UploadedFile,
   ParseUUIDPipe,
   HttpStatus,
   HttpCode,
+  Logger,
+  NotFoundException,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
-  ApiConsumes,
-  ApiBody,
   ApiBearerAuth,
   ApiParam,
 } from '@nestjs/swagger';
 import { DataSourcesService } from './data-sources.service';
 import { ConnectionTestService } from './connection-test.service';
+import { SchemaExtractionService } from './schema-extraction.service';
 import { CreateDataSourceDto } from './dto/create-data-source.dto';
 import { UpdateDataSourceDto } from './dto/update-data-source.dto';
 import { QueryDataSourceDto } from './dto/query-data-source.dto';
 import { TestConnectionDto } from './dto/test-connection.dto';
 import { SyncDataSourceDto } from './dto/sync-data-source.dto';
-import { FilePreviewDto } from './dto/file-preview.dto';
 import { DataSource } from './entities/data-source.entity';
 import { DataSourceSync } from './entities/data-source-sync.entity';
+import { DataSourceSchema } from './entities/data-source-schema.entity';
 import { PaginatedResult } from '../common/dto/pagination.dto';
 
 @ApiTags('data-sources')
 @ApiBearerAuth()
 @Controller('data-sources')
 export class DataSourcesController {
+  private readonly logger = new Logger(DataSourcesController.name);
   constructor(
     private readonly dataSourcesService: DataSourcesService,
     private readonly connectionTestService: ConnectionTestService,
+    private readonly schemaExtractionService: SchemaExtractionService,
   ) {}
 
   @Get()
@@ -169,4 +169,49 @@ export class DataSourcesController {
     return this.dataSourcesService.getSyncStatus(id, syncId);
   }
 
+  @Post(':id/extract-schema')
+  @ApiOperation({ summary: 'Extract schema from a data source' })
+  @ApiParam({ name: 'id', description: 'Data source ID' })
+  @ApiResponse({
+    status: 202,
+    description: 'Schema extraction has been started',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Data source not found',
+  })
+  @HttpCode(HttpStatus.ACCEPTED)
+  async extractSchema(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<{ message: string; id: string }> {
+    // Start schema extraction in the background
+    this.schemaExtractionService.extractAndStoreSchema(id)
+      .catch(error => this.logger.error(`Schema extraction failed: ${error.message}`, error.stack));
+
+    return {
+      message: 'Schema extraction started',
+      id,
+    };
+  }
+
+  @Get(':id/schema')
+  @ApiOperation({ summary: 'Get schema for a data source' })
+  @ApiParam({ name: 'id', description: 'Data source ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns the schema',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Data source or schema not found',
+  })
+  async getSchema(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<DataSourceSchema> {
+    const schema = await this.schemaExtractionService.getSchema(id);
+    if (!schema) {
+      throw new NotFoundException(`Schema for data source ${id} not found`);
+    }
+    return schema;
+  }
 }

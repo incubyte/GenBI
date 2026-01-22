@@ -406,6 +406,7 @@ export default function DataSources() {
               {data.items.map((source) => (
                 <DataSourceCard
                   key={source.id}
+                  id={source.id}
                   name={source.name}
                   type={source.type}
                   status={source.status}

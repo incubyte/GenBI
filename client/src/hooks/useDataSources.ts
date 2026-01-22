@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import dataSourcesService, {
   CreateDataSourceDto,
-  TestConnectionDto
+  TestConnectionDto,
+  DataSourceSchema
 } from '@/services/dataSourcesService';
 import { toast } from '@/components/ui/sonner';
 
@@ -90,6 +91,43 @@ export const useSyncDataSource = (id: string) => {
       // Invalidate the specific data source to refetch it with updated sync info
       queryClient.invalidateQueries({ queryKey: ['dataSource', id] });
       toast.success('Sync started successfully');
+    },
+  });
+};
+
+export const useExtractSchema = (id: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => dataSourcesService.extractSchema(id),
+    onSuccess: () => {
+      toast.success('Schema extraction started');
+      // We'll poll for the schema after a delay
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['dataSourceSchema', id] });
+      }, 3000);
+    },
+  });
+};
+
+export const useDataSourceSchema = (id: string) => {
+  return useQuery({
+    queryKey: ['dataSourceSchema', id],
+    queryFn: () => dataSourcesService.getSchema(id),
+    enabled: !!id,
+    retry: 3,
+    retryDelay: 1000,
+    refetchInterval: (data) => {
+      // If we have data and it was extracted recently (within the last minute), stop polling
+      if (data && data.lastExtracted) {
+        const lastExtracted = new Date(data.lastExtracted);
+        const now = new Date();
+        const diffInSeconds = (now.getTime() - lastExtracted.getTime()) / 1000;
+        if (diffInSeconds < 60) {
+          return false; // Stop polling
+        }
+      }
+      return 5000; // Poll every 5 seconds
     },
   });
 };

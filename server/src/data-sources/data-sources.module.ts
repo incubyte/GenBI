@@ -7,7 +7,9 @@ import { DataSourceSync } from './entities/data-source-sync.entity';
 import { DataSourceTable } from './entities/data-source-table.entity';
 import { DataSourceColumn } from './entities/data-source-column.entity';
 import { DataSourceRelationship } from './entities/data-source-relationship.entity';
+import { DataSourceSchema } from './entities/data-source-schema.entity';
 import { ConnectionTestService } from './connection-test.service';
+import { SchemaExtractionService } from './schema-extraction.service';
 
 @Module({
   imports: [
@@ -17,10 +19,11 @@ import { ConnectionTestService } from './connection-test.service';
       DataSourceTable,
       DataSourceColumn,
       DataSourceRelationship,
+      DataSourceSchema,
     ]),
   ],
   controllers: [DataSourcesController],
-  providers: [DataSourcesService, ConnectionTestService],
-  exports: [DataSourcesService],
+  providers: [DataSourcesService, ConnectionTestService, SchemaExtractionService],
+  exports: [DataSourcesService, SchemaExtractionService],
 })
 export class DataSourcesModule {}

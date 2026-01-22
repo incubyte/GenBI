@@ -1,12 +1,64 @@
 
-import { Database, CheckCircle, AlertCircle } from "lucide-react";
+import { Database, CheckCircle, AlertCircle, FileText, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { useExtractSchema, useDataSourceSchema } from "@/hooks/useDataSources";
+import { useState } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
-export type DataSourceStatus = "connected" | "disconnected" | "error";
+// Simple markdown to HTML converter
+function markdownToHtml(markdown: string): string {
+  // Convert headers
+  let html = markdown
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^#### (.+)$/gm, '<h4>$1</h4>')
+    .replace(/^##### (.+)$/gm, '<h5>$1</h5>')
+    .replace(/^###### (.+)$/gm, '<h6>$1</h6>');
+
+  // Convert tables
+  html = html.replace(/\|(.+)\|\n\|[-:|\s]+\|\n((\|.+\|\n)+)/g, (match) => {
+    const lines = match.split('\n');
+    const headers = lines[0].split('|').filter(cell => cell.trim() !== '').map(cell => `<th>${cell.trim()}</th>`).join('');
+    const rows = lines.slice(2, -1).map(line => {
+      const cells = line.split('|').filter(cell => cell.trim() !== '').map(cell => `<td>${cell.trim()}</td>`).join('');
+      return `<tr>${cells}</tr>`;
+    }).join('');
+
+    return `<table><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table>`;
+  });
+
+  // Convert bold and italic
+  html = html
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>');
+
+  // Convert lists
+  html = html
+    .replace(/^- (.+)$/gm, '<li>$1</li>')
+    .replace(/(<li>.+<\/li>\n)+/g, '<ul>$&</ul>');
+
+  // Convert paragraphs (must be done last)
+  html = html
+    .replace(/^([^<\n].+)$/gm, '<p>$1</p>')
+    .replace(/\n\n/g, '<br>');
+
+  return html;
+}
+
+export type DataSourceStatus = "connected" | "connecting" | "disconnected" | "error";
 
 interface DataSourceCardProps {
+  id: string;
   name: string;
   type: string;
   status: DataSourceStatus;
@@ -18,6 +70,7 @@ interface DataSourceCardProps {
 }
 
 export function DataSourceCard({
+  id,
   name,
   type,
   status,
@@ -26,9 +79,20 @@ export function DataSourceCard({
   icon = <Database className="h-5 w-5" />,
   className,
   onClick,
-}: DataSourceCardProps) {
+}: Readonly<DataSourceCardProps>) {
+  const [schemaDialogOpen, setSchemaDialogOpen] = useState(false);
+  const extractSchema = useExtractSchema(id);
+  const { data: schema, isLoading: isLoadingSchema } = useDataSourceSchema(id);
+
+  const handleSchemaClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSchemaDialogOpen(true);
+    if (!schema) {
+      extractSchema.mutate();
+    }
+  };
   return (
-    <Card 
+    <Card
       className={cn(
         "overflow-hidden transition-all duration-200 hover:shadow-md cursor-pointer",
         className
@@ -47,7 +111,7 @@ export function DataSourceCard({
         </div>
         <StatusBadge status={status} />
       </CardHeader>
-      
+
       <CardContent className="p-4">
         <div className="grid grid-cols-2 gap-2 text-sm">
           {lastSync && (
@@ -64,13 +128,18 @@ export function DataSourceCard({
           )}
         </div>
       </CardContent>
-      
-      <CardFooter className="p-4 pt-0">
+
+      <CardFooter className="p-4 pt-0 flex justify-between items-center">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           {status === "connected" ? (
             <>
               <CheckCircle className="h-3 w-3 text-green-500" />
               <span>Syncing normally</span>
+            </>
+          ) : status === "connecting" ? (
+            <>
+              <Loader2 className="h-3 w-3 text-blue-500 animate-spin" />
+              <span>Connecting...</span>
             </>
           ) : status === "error" ? (
             <>
@@ -84,12 +153,55 @@ export function DataSourceCard({
             </>
           )}
         </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 w-8 p-0"
+          onClick={handleSchemaClick}
+        >
+          <FileText className="h-4 w-4" />
+        </Button>
       </CardFooter>
+
+      <Dialog open={schemaDialogOpen} onOpenChange={setSchemaDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Database Schema: {name}</DialogTitle>
+            <DialogDescription>
+              Schema information for {type} data source
+            </DialogDescription>
+          </DialogHeader>
+
+          {isLoadingSchema || extractSchema.isPending ? (
+            <div className="flex flex-col items-center justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-primary mb-2" />
+              <p className="text-sm text-muted-foreground">
+                {extractSchema.isPending ? "Extracting schema..." : "Loading schema..."}
+              </p>
+            </div>
+          ) : schema ? (
+            <div className="prose prose-sm max-w-none dark:prose-invert">
+              <div dangerouslySetInnerHTML={{ __html: markdownToHtml(schema.schemaMarkdown) }} />
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <p className="text-muted-foreground">No schema information available.</p>
+              <Button
+                variant="outline"
+                className="mt-4"
+                onClick={() => extractSchema.mutate()}
+              >
+                Extract Schema
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
 
-function StatusBadge({ status }: { status: DataSourceStatus }) {
+function StatusBadge({ status }: Readonly<{ status: DataSourceStatus }>) {
   if (status === "connected") {
     return (
       <Badge variant="outline" className="text-green-500 border-green-200 bg-green-50">
